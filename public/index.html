@@ -292,11 +292,11 @@ canvas{width:100%;height:100%}
   <!-- Position -->
   <div class="sec">
     <div class="stit">// POSIÇÃO / TP / SL</div>
-    <div class="slr"><div class="sll">SOL por trade <b id="vP">0.5</b></div><input type=range min=.1 max=5 step=.1 value=.5 oninput="vP.textContent=parseFloat(this.value).toFixed(1)"></div>
-    <div class="slr"><div class="sll">Capital total <b id="vC">10</b> SOL</div><input type=range min=1 max=50 step=1 value=10 oninput="vC.textContent=this.value;IC=+this.value"></div>
-    <div class="slr"><div class="sll">TP1 — 50% em <b id="vT1">2</b>x</div><input type=range min=1.5 max=10 step=.5 value=2 oninput="vT1.textContent=parseFloat(this.value).toFixed(1)"></div>
-    <div class="slr"><div class="sll">TP2 — 30% em <b id="vT2">5</b>x</div><input type=range min=2 max=50 step=1 value=5 oninput="vT2.textContent=this.value"></div>
-    <div class="slr"><div class="sll">Stop Loss <b id="vSL">-50</b>%</div><input type=range min=-90 max=-10 step=5 value=-50 oninput="vSL.textContent=this.value"></div>
+    <div class="slr"><div class="sll">SOL por trade <b id="vP">0.5</b></div><input id="inpPos" type=range min=.1 max=5 step=.1 value=.5 oninput="vP.textContent=parseFloat(this.value).toFixed(1)"></div>
+    <div class="slr"><div class="sll">Capital total <b id="vC">10</b> SOL</div><input id="inpCap" type=range min=1 max=50 step=1 value=10 oninput="vC.textContent=this.value;IC=+this.value;S.capital=+this.value"></div>
+    <div class="slr"><div class="sll">TP1 — 50% em <b id="vT1">2</b>x</div><input id="inpTp1" type=range min=1.5 max=10 step=.5 value=2 oninput="vT1.textContent=parseFloat(this.value).toFixed(1)"></div>
+    <div class="slr"><div class="sll">TP2 — 30% em <b id="vT2">5</b>x</div><input id="inpTp2" type=range min=2 max=50 step=1 value=5 oninput="vT2.textContent=this.value"></div>
+    <div class="slr"><div class="sll">Stop Loss <b id="vSL">-50</b>%</div><input id="inpSl" type=range min=-90 max=-10 step=5 value=-50 oninput="vSL.textContent=this.value"></div>
   </div>
 
   <!-- Filters -->
@@ -415,6 +415,14 @@ const SP = {
   momentum:{wr:.44,rr:.17,avg:4.6,delay:520}
 };
 const TOKS = ['BONK','WIF','POPCAT','MOODENG','PNUT','FWOG','GOAT','RETARDIO','BOME','SILLY','TREMP','BODEN','MYRO','PONKE','NOPE','SLERF','ANALOS','SPX6900','GECKO','SIGMA','GIGA','CHAD','COPE','JUICE','HARAMBE','PEPE2','DOGE2','SHIB2','MOON','WOJAK'];
+
+// Lê valor de slider com fallback seguro — NUNCA retorna NaN
+function getSlider(id, fallback) {
+  const el = document.getElementById(id);
+  if (!el) return fallback;
+  const v = parseFloat(el.value);
+  return isNaN(v) ? fallback : v;
+}
 
 // ====================================================
 // MODE SWITCH
@@ -672,10 +680,10 @@ function applyFilters(tok) {
 
 // Executa a lógica completa de trade em um token real
 function executeLiveTrade(tok, source) {
-  const pos = parseFloat(document.getElementById('vP').value);
-  const tp1 = parseFloat(document.getElementById('vT1').value);
-  const tp2 = parseFloat(document.getElementById('vT2').value);
-  const sl  = parseFloat(document.getElementById('vSL').value) / 100;
+  const pos = getSlider('inpPos', 0.5);
+  const tp1 = getSlider('inpTp1', 2);
+  const tp2 = getSlider('inpTp2', 5);
+  const sl  = getSlider('inpSl', -50) / 100;
   const sp  = SP[strat];
 
   // 1. Checa filtros anti-rug
@@ -781,6 +789,7 @@ function toggleSim() {
 }
 
 function startSim() {
+  IC = getSlider('inpCap', 10);
   running = true; tick = 0; pnlH = [0];
   Object.assign(S, {pnl:0,wins:0,losses:0,rugs:0,rugAv:0,skips:0,trades:0,capital:IC,best:null,worst:null,multiples:[]});
   document.getElementById('feed').innerHTML = '';
@@ -840,11 +849,11 @@ function simTick() {
     updStats(); return;
   }
 
-  const pos = parseFloat(document.getElementById('vP').value);
+  const pos = getSlider('inpPos', 0.5);
   if (S.capital < pos) { stopSim(); return; }
-  const tp1 = parseFloat(document.getElementById('vT1').value);
-  const tp2 = parseFloat(document.getElementById('vT2').value);
-  const sl = parseFloat(document.getElementById('vSL').value) / 100;
+  const tp1 = getSlider('inpTp1', 2);
+  const tp2 = getSlider('inpTp2', 5);
+  const sl = getSlider('inpSl', -50) / 100;
   let pnl = 0;
 
   if (tok.isRug) {
@@ -935,7 +944,8 @@ function addLog(msg, type) {
 }
 
 function updStats() {
-  const p = S.pnl;
+  const p = isNaN(S.pnl) ? 0 : S.pnl;
+  const cap = isNaN(S.capital) ? IC : S.capital;
   se('stP', (p>=0?'+':'')+p.toFixed(3));
   document.getElementById('stP').className='sval '+(p>=0?'g':'r');
   se('chpv',(p>=0?'+':'')+p.toFixed(3));
@@ -950,11 +960,11 @@ function updStats() {
   se('stT',S.trades);
   se('stR',S.rugAv);
   const capEl=document.getElementById('stK');
-  capEl.textContent=S.capital.toFixed(2)+' SOL';
-  capEl.className='sval '+(S.capital>=IC?'g':'r');
+  capEl.textContent=cap.toFixed(2)+' SOL';
+  capEl.className='sval '+(cap>=IC?'g':'r');
   se('bW',S.wins); se('bL',S.losses); se('bR',S.rugs); se('bRa',S.rugAv); se('bSk',S.skips);
-  se('bBest',S.best!==null?'+'+S.best.toFixed(3)+' SOL':'—');
-  se('bWorst',S.worst!==null?S.worst.toFixed(3)+' SOL':'—');
+  se('bBest',S.best!==null&&!isNaN(S.best)?'+'+S.best.toFixed(3)+' SOL':'—');
+  se('bWorst',S.worst!==null&&!isNaN(S.worst)?S.worst.toFixed(3)+' SOL':'—');
   const avg=S.multiples.length?(S.multiples.reduce((a,b)=>a+b,0)/S.multiples.length).toFixed(2)+'x':'—';
   se('bAvg',avg);
 }
