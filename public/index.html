@@ -416,6 +416,20 @@ const SP = {
 };
 const TOKS = ['BONK','WIF','POPCAT','MOODENG','PNUT','FWOG','GOAT','RETARDIO','BOME','SILLY','TREMP','BODEN','MYRO','PONKE','NOPE','SLERF','ANALOS','SPX6900','GECKO','SIGMA','GIGA','CHAD','COPE','JUICE','HARAMBE','PEPE2','DOGE2','SHIB2','MOON','WOJAK'];
 
+// Lista rotativa de memecoins reais Solana para busca na API
+const MEME_QUERIES = [
+  'BONK','WIF','POPCAT','MOODENG','PNUT','FWOG','GOAT',
+  'RETARDIO','BOME','SILLY','PONKE','MYRO','NOPE','SLERF',
+  'ANALOS','SPX6900','GECKO','GIGA','COPE','TREMP','BODEN',
+  'SIGMA','CHAD','PEPE','DOGE','SHIB','FLOKI','WOJAK'
+];
+let memeQueryIdx = 0;
+function nextMemeQuery() {
+  const q = MEME_QUERIES[memeQueryIdx % MEME_QUERIES.length];
+  memeQueryIdx++;
+  return q;
+}
+
 // Lê valor de slider com fallback seguro — NUNCA retorna NaN
 function getSlider(id, fallback) {
   const el = document.getElementById(id);
@@ -581,7 +595,7 @@ async function fetchLivePairs(query = 'solana') {
     injectPairs(toProcess, 'live');
     liveRealPairs += toProcess.length;
     document.getElementById('bPairs').textContent = liveRealPairs;
-    addLog(`📡 ${toProcess.length} pares Solana recebidos — executando estratégia ${strat.toUpperCase()}`, 'sell');
+    addLog(`📡 ${toProcess.length} pares recebidos para ${query.toUpperCase()} — executando ${strat.toUpperCase()}`, 'sell');
     // Atualiza barra de progresso (infinite loop no live)
     tick += toProcess.length;
     document.getElementById('pgf').style.width = Math.min((tick % 200) / 200 * 100, 98) + '%';
@@ -801,7 +815,7 @@ function startSim() {
 
   if (mode === 'live') {
     setDot('ok','LIVE');
-    fetchLivePairs('solana');
+    fetchLivePairs(nextMemeQuery());
     restartLive();
   } else {
     setDot('ok','SIMULANDO');
@@ -812,7 +826,7 @@ function startSim() {
 
 function restartLive() {
   clearInterval(liveInt);
-  liveInt = setInterval(() => fetchLivePairs('solana'), fetchInterval);
+  liveInt = setInterval(() => fetchLivePairs(nextMemeQuery()), fetchInterval);
 }
 
 function stopSim() {
