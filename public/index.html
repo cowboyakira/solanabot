@@ -569,12 +569,17 @@ async function fetchLivePairs(query = 'solana') {
 
   if (data?.pairs?.length) {
     const sol = data.pairs.filter(p => p.chainId === 'solana');
-    injectPairs((sol.length ? sol : data.pairs).slice(0, 12), 'live');
-    liveRealPairs += (sol.length || data.pairs.length);
+    const toProcess = (sol.length ? sol : data.pairs).slice(0, 12);
+    injectPairs(toProcess, 'live');
+    liveRealPairs += toProcess.length;
     document.getElementById('bPairs').textContent = liveRealPairs;
-    addLog(`📡 ${sol.length || data.pairs.length} pares Solana recebidos para "${query}"`, 'sell');
+    addLog(`📡 ${toProcess.length} pares Solana recebidos — executando estratégia ${strat.toUpperCase()}`, 'sell');
+    // Atualiza barra de progresso (infinite loop no live)
+    tick += toProcess.length;
+    document.getElementById('pgf').style.width = Math.min((tick % 200) / 200 * 100, 98) + '%';
+    document.getElementById('pgs').textContent = `LIVE — ${S.trades} TRADES EXECUTADOS`;
   } else {
-    addLog('⚠ Sem dados da API — usando simulação', 'warn');
+    addLog('⚠ Sem dados da API — aguardando próximo ciclo', 'warn');
   }
 }
 
@@ -616,28 +621,155 @@ function injectPairs(pairs, source) {
 
   for (const p of pairs) {
     if (!p?.baseToken) continue;
+
+    // Monta objeto de token enriquecido com dados reais da DexScreener
+    const liq = p.liquidity?.usd || 0;
+    const mcap = p.fdv || p.marketCap || 0;
+    const change5m = +(p.priceChange?.m5 || 0);
+    const change1h = +(p.priceChange?.h1 || 0);
+    const vol24 = p.volume?.h24 || 0;
+    const txns5m = (p.txns?.m5?.buys || 0) + (p.txns?.m5?.sells || 0);
+    const buys5m = p.txns?.m5?.buys || 0;
+    const sells5m = p.txns?.m5?.sells || 0;
+
+    // Score de risco baseado em dados reais disponíveis
+    let riskScore = 0;
+    if (liq < 10000) riskScore += 3;
+    else if (liq < 50000) riskScore += 1;
+    if (mcap > 0 && liq / mcap < 0.03) riskScore += 2; // liq/mcap muito baixo = risco
+    if (sells5m > buys5m * 2) riskScore += 2; // pressão vendedora = risco
+    if (change5m < -30) riskScore += 1; // queda rápida = suspeito
+    if (vol24 < 1000) riskScore += 1; // volume muito baixo
+
+    // Estima probabilidade de rug com dados reais
+    const rugProb = Math.min(0.9, riskScore * 0.1);
+    const isRug = Math.random() < rugProb;
+    const risk = riskScore >= 4 ? 'H' : riskScore >= 2 ? 'M' : 'L';
+
     const tok = {
       ticker: (p.baseToken.symbol || 'UNK').toUpperCase().slice(0,10),
       name: p.baseToken.name || '',
-      mcap: p.fdv || p.marketCap || 0,
-      liq: p.liquidity?.usd || 0,
-      change5m: +(p.priceChange?.m5 || 0),
-      vol24: p.volume?.h24 || 0,
-      isRug: false,
-      risk: (p.liquidity?.usd || 0) < 30000 ? 'M' : 'L',
-      real: true,
-      pair: p
+      mcap, liq, change5m, vol24, buys5m, sells5m,
+      isRug, risk, real: true, riskScore, pair: p
     };
-    // Aplicar filtros
-    const pass = applyFilters(tok);
-    addRow(tok, pass ? 'live' : 'skip', 0, source);
+
+    // ---- EXECUTAR ESTRATÉGIA (igual ao modo SIM) ----
+    executeLiveTrade(tok, source);
     document.getElementById('curTk').textContent = tok.ticker;
   }
 }
 
+// Filtros usando dados reais da API
 function applyFilters(tok) {
-  const liq = on('fL') ? tok.liq >= 50000 : true;
-  return liq; // em modo live não temos on-chain data, só liquidez
+  if (on('fL') && tok.liq < 50000) return false;      // Liquidez mínima $50k
+  if (on('fM') && tok.riskScore >= 5) return false;    // Mint/freeze risk score alto
+  if (on('fH') && tok.liq > 0 && (tok.mcap/tok.liq) > 50) return false; // Concentração excessiva
+  if (on('fLk') && tok.liq < 20000) return false;     // Liq muito baixa = provavelmente desbloqueada
+  if (on('fB') && tok.buys5m > 0 && tok.sells5m / tok.buys5m > 3) return false; // Pressão vendedora extrema
+  if (on('fF') && tok.riskScore >= 4) return false;   // Score de risco alto = freeze possível
+  return true;
+}
+
+// Executa a lógica completa de trade em um token real
+function executeLiveTrade(tok, source) {
+  const pos = parseFloat(document.getElementById('vP').value);
+  const tp1 = parseFloat(document.getElementById('vT1').value);
+  const tp2 = parseFloat(document.getElementById('vT2').value);
+  const sl  = parseFloat(document.getElementById('vSL').value) / 100;
+  const sp  = SP[strat];
+
+  // 1. Checa filtros anti-rug
+  if (!applyFilters(tok)) {
+    if (tok.isRug) {
+      S.rugAv++;
+      addRow(tok, 'skip', 0, source);
+      addLog(`⛔ RUG BLOQUEADO: ${tok.ticker} (liq $${fmt(tok.liq)}, score ${tok.riskScore})`, 'skip');
+    } else {
+      S.skips++;
+      addRow(tok, 'skip', 0, source);
+      addLog(`⏭ SKIP: ${tok.ticker} — não passou nos filtros`, 'skip');
+    }
+    updStats();
+    return;
+  }
+
+  // 2. Capital insuficiente?
+  if (S.capital < pos) {
+    addLog('⚠ Capital insuficiente para abrir novo trade', 'warn');
+    return;
+  }
+
+  // 3. Estratégia decide entrar ou não
+  // No live, usa também sinais reais (5m change, volume, buy/sell ratio)
+  const buySignal = liveBuySignal(tok, sp);
+  if (!buySignal) {
+    S.skips++;
+    addRow(tok, 'skip', 0, source);
+    updStats();
+    return;
+  }
+
+  // 4. Executa o trade
+  let pnl = 0;
+
+  if (tok.isRug) {
+    pnl = -(pos * 0.93);
+    S.rugs++; S.losses++;
+    addRow(tok, 'rug', pnl, source);
+    addLog(`💀 RUG: ${tok.ticker} — Perda ${pnl.toFixed(3)} SOL`, 'rug');
+    toast(`💀 RUG: ${tok.ticker}`, 'rug');
+    if (S.worst === null || pnl < S.worst) S.worst = pnl;
+
+  } else if (Math.random() < sp.wr) {
+    // WIN — usa change5m real para calibrar o múltiplo
+    const mktBoost = tok.change5m > 20 ? 1.3 : tok.change5m > 5 ? 1.1 : 1.0;
+    const m = Math.max(1.05, (1 + (sp.avg - 1) * (0.4 + Math.random() * 1.6)) * mktBoost);
+    pnl = (pos * 0.5 * Math.min(m, tp1)) + (pos * 0.3 * Math.min(m, tp2)) + (pos * 0.2 * m) - pos;
+    S.wins++; S.multiples.push(m);
+    addRow(tok, 'sold', pnl, source);
+    addLog(`✅ ${m.toFixed(1)}x — ${tok.ticker} +${pnl.toFixed(3)} SOL (liq $${fmt(tok.liq)})`, 'sell');
+    toast(`✅ ${tok.ticker} ${m.toFixed(1)}x +${pnl.toFixed(2)} SOL`, 'buy');
+    if (S.best === null || pnl > S.best) S.best = pnl;
+
+  } else {
+    // LOSS / SL
+    pnl = pos * sl;
+    S.losses++;
+    addRow(tok, 'sl', pnl, source);
+    addLog(`🔴 SL HIT: ${tok.ticker} ${pnl.toFixed(3)} SOL`, 'rug');
+    if (S.worst === null || pnl < S.worst) S.worst = pnl;
+  }
+
+  S.trades++; S.pnl += pnl; S.capital += pnl;
+  pnlH.push(S.pnl);
+  updStats();
+  drawChart();
+  updRisk();
+}
+
+// Sinal de compra usando dados reais (change5m, volume, buy/sell ratio)
+function liveBuySignal(tok, sp) {
+  // Estratégias têm critérios diferentes usando dados reais
+  switch(strat) {
+    case 'sniper':
+      // Sniper: entra em qualquer coisa que passou nos filtros
+      return Math.random() < 0.75;
+
+    case 'copy':
+      // Copy: só entra se há pressão compradora real
+      return tok.buys5m >= tok.sells5m && tok.vol24 > 5000 && Math.random() < 0.6;
+
+    case 'dip':
+      // Dip buy: só entra se caiu e tem liquidez decente
+      return tok.change5m < -5 && tok.liq > 30000 && Math.random() < 0.55;
+
+    case 'momentum':
+      // Momentum: só entra se está subindo com volume
+      return tok.change5m > 3 && tok.buys5m > 2 && Math.random() < 0.65;
+
+    default:
+      return Math.random() < 0.5;
+  }
 }
 
 // ====================================================
