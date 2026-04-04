@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOL SNIPER v2 — Live DexScreener</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Bebas+Neue&family=Rajdhani:wght@400;600;700&display=swap');
+:root{
+  --g:#00ff88;--g2:#00cc66;--g3:rgba(0,255,136,0.07);
+  --r:#ff2244;--r2:rgba(255,34,68,0.1);
+  --y:#ffd000;--c:#00d4ff;--p:#b060ff;--o:#ff8800;
+  --bg:#020c0a;--bg2:#051410;--bg3:#071c14;
+  --bdr:rgba(0,255,136,0.07);--bdr2:rgba(0,255,136,0.16);
+  --txt:#9ff5cc;--dim:#2a6649;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:12px}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,136,0.01) 3px,rgba(0,255,136,0.01) 4px);pointer-events:none;z-index:9997}
+
+/* LAYOUT */
+.root{display:grid;grid-template-rows:50px 1fr;height:100vh}
+.body{display:grid;grid-template-columns:290px 1fr 270px;overflow:hidden}
+
+/* TOPBAR */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:linear-gradient(90deg,#020c0a,#061510,#020c0a);
+  border-bottom:1px solid var(--bdr2);z-index:100;
+}
+.logo{font-family:'Bebas Neue';font-size:24px;letter-spacing:5px;color:var(--g);text-shadow:0 0 25px rgba(0,255,136,.4)}
+.logo em{color:var(--c);font-style:normal}
+.logo sup{font-size:10px;font-family:'JetBrains Mono';color:var(--y);letter-spacing:1px}
+.top-pills{display:flex;gap:3px}
+.pill{padding:5px 14px;border:1px solid;font-size:10px;font-family:'Rajdhani';font-weight:700;letter-spacing:2px;cursor:pointer;transition:.15s}
+.pill.sim{border-color:rgba(255,208,0,.4);color:var(--y)}
+.pill.live{border-color:rgba(0,255,136,.4);color:var(--g)}
+.pill.on.sim{background:rgba(255,208,0,.1);border-color:var(--y);box-shadow:0 0 12px rgba(255,208,0,.15)}
+.pill.on.live{background:rgba(0,255,136,.1);border-color:var(--g);box-shadow:0 0 12px rgba(0,255,136,.15)}
+.top-r{display:flex;gap:18px;align-items:center;font-size:10px;color:var(--dim)}
+.conn{display:flex;align-items:center;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:var(--g);box-shadow:0 0 8px var(--g);animation:blk 1.2s infinite}
+.dot.wait{background:var(--y);box-shadow:0 0 8px var(--y)}
+.dot.err{background:var(--r);box-shadow:0 0 8px var(--r)}
+@keyframes blk{0%,100%{opacity:1}50%{opacity:.25}}
+.ts{display:flex;flex-direction:column;align-items:flex-end}
+.ts b{color:var(--txt);font-weight:600}
+
+/* PANELS */
+.left,.right{overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr2) transparent}
+.left{border-right:1px solid var(--bdr)}
+.right{border-left:1px solid var(--bdr)}
+.sec{padding:12px 14px;border-bottom:1px solid var(--bdr)}
+.stit{font-size:9px;letter-spacing:3px;color:var(--c);font-family:'Rajdhani';font-weight:700;margin-bottom:9px;text-transform:uppercase}
+
+/* Proxy config box */
+.proxy-box{
+  background:var(--bg3);border:1px solid var(--bdr2);padding:10px 12px;margin-bottom:8px;
+}
+.proxy-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:10px}
+.proxy-row:last-child{margin-bottom:0}
+.proxy-inp{
+  flex:1;background:#000;border:1px solid var(--bdr2);color:var(--g);
+  padding:4px 8px;font-family:'JetBrains Mono';font-size:10px;outline:none;
+  margin-left:8px;
+}
+.proxy-inp:focus{border-color:var(--g2)}
+.badge{font-size:9px;padding:1px 7px;font-weight:700;border-radius:1px}
+.badge.ok{background:rgba(0,255,136,.12);color:var(--g);border:1px solid var(--g2)}
+.badge.err{background:var(--r2);color:var(--r);border:1px solid var(--r)}
+.badge.wait{background:rgba(255,208,0,.1);color:var(--y);border:1px solid var(--y)}
+.badge.cors{background:rgba(176,96,255,.12);color:var(--p);border:1px solid var(--p)}
+.test-btn{
+  padding:3px 10px;background:var(--g3);border:1px solid var(--bdr2);
+  color:var(--g);font-family:'JetBrains Mono';font-size:10px;cursor:pointer;transition:.12s;margin-top:6px;width:100%;
+}
+.test-btn:hover{background:rgba(0,255,136,.14)}
+
+/* Step guide */
+.step-list{counter-reset:step}
+.step{display:flex;gap:8px;margin-bottom:8px;font-size:10px;color:var(--dim);line-height:1.5}
+.step::before{counter-increment:step;content:counter(step);color:var(--g);font-weight:700;min-width:14px}
+.step code{background:rgba(0,255,136,.08);border:1px solid var(--bdr2);padding:1px 5px;color:var(--txt);font-size:9px}
+
+/* Strat */
+.sbtn{
+  width:100%;padding:8px 12px;background:transparent;border:1px solid var(--bdr);
+  color:var(--txt);font-family:'JetBrains Mono';font-size:11px;cursor:pointer;
+  text-align:left;display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:5px;transition:.12s;position:relative;
+}
+.sbtn::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--g);opacity:0;transition:.12s}
+.sbtn.on,.sbtn:hover{background:var(--g3);border-color:var(--bdr2);color:var(--g)}
+.sbtn.on::before{opacity:1}
+.stag{font-size:9px;padding:1px 5px;border:1px solid currentColor;opacity:.6}
+.sbtn.on .stag{opacity:1}
+
+/* Sliders */
+.slr{margin-bottom:8px}
+.sll{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:3px}
+.sll b{color:var(--y)}
+input[type=range]{width:100%;-webkit-appearance:none;height:2px;background:var(--bdr2);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;background:var(--g);border-radius:50%;box-shadow:0 0 5px var(--g)}
+
+/* Toggles */
+.trow{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:10px;color:var(--dim)}
+.tgl{width:28px;height:14px;background:var(--bdr);border-radius:7px;cursor:pointer;position:relative;transition:.2s;flex-shrink:0}
+.tgl.on{background:rgba(0,255,136,.2);border:1px solid var(--g2)}
+.tgl::after{content:'';position:absolute;width:10px;height:10px;background:var(--dim);border-radius:50%;top:2px;left:2px;transition:.2s}
+.tgl.on::after{left:16px;background:var(--g);box-shadow:0 0 4px var(--g)}
+
+/* Run */
+.run{
+  width:100%;padding:13px;background:linear-gradient(135deg,rgba(0,255,136,.1),rgba(0,212,255,.07));
+  border:1px solid var(--g);color:var(--g);font-family:'Bebas Neue';font-size:17px;
+  letter-spacing:4px;cursor:pointer;transition:.2s;
+}
+.run:hover{background:linear-gradient(135deg,rgba(0,255,136,.18),rgba(0,212,255,.12));box-shadow:0 0 25px rgba(0,255,136,.18)}
+.run.go{color:var(--y);border-color:var(--y);animation:rp .9s infinite}
+@keyframes rp{0%,100%{box-shadow:0 0 8px rgba(255,208,0,.1)}50%{box-shadow:0 0 22px rgba(255,208,0,.3)}}
+.pgb{height:2px;background:var(--bdr);margin-top:6px;overflow:hidden}
+.pgf{height:100%;background:var(--g);transition:width .1s}
+.pgs{font-size:9px;color:var(--dim);text-align:center;margin-top:4px;letter-spacing:1px}
+
+/* CENTER */
+.center{display:flex;flex-direction:column;overflow:hidden}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--bdr);flex-shrink:0}
+.stat{padding:9px 10px;border-right:1px solid var(--bdr);text-align:center}
+.stat:last-child{border-right:none}
+.slbl{font-size:8px;letter-spacing:2px;color:var(--dim);font-family:'Rajdhani';font-weight:700;text-transform:uppercase}
+.sval{font-family:'Bebas Neue';font-size:20px;margin-top:1px;letter-spacing:1px}
+.sval.g{color:var(--g);text-shadow:0 0 10px rgba(0,255,136,.25)}
+.sval.r{color:var(--r)} .sval.y{color:var(--y)} .sval.c{color:var(--c)} .sval.w{color:var(--txt)}
+
+/* Chart */
+.cw{height:170px;background:var(--bg2);border-bottom:1px solid var(--bdr);position:relative;flex-shrink:0}
+canvas{width:100%;height:100%}
+.ch{position:absolute;top:8px;left:12px;pointer-events:none}
+.chp{font-family:'Bebas Neue';font-size:26px;color:var(--g);text-shadow:0 0 18px rgba(0,255,136,.35);letter-spacing:1px}
+.chc{font-size:11px;color:var(--g)} .chc.dn{color:var(--r)}
+.chr{position:absolute;top:8px;right:12px;text-align:right;pointer-events:none;font-size:10px;color:var(--dim)}
+
+/* Search */
+.srch{padding:7px 12px;border-bottom:1px solid var(--bdr);display:flex;gap:5px;flex-shrink:0}
+.si{flex:1;background:var(--bg3);border:1px solid var(--bdr2);color:var(--txt);padding:5px 9px;font-family:'JetBrains Mono';font-size:11px;outline:none}
+.si:focus{border-color:var(--g2);box-shadow:0 0 6px rgba(0,255,136,.08)}
+.si::placeholder{color:var(--dim)}
+.sb{padding:5px 12px;background:var(--g3);border:1px solid var(--bdr2);color:var(--g);font-family:'JetBrains Mono';font-size:11px;cursor:pointer;transition:.12s}
+.sb:hover{background:rgba(0,255,136,.12)}
+
+/* Feed */
+.fhdr{
+  display:grid;grid-template-columns:165px 80px 72px 78px 70px 68px;
+  padding:5px 12px;font-size:9px;letter-spacing:1.5px;color:var(--dim);
+  border-bottom:1px solid var(--bdr2);background:var(--bg2);
+  font-family:'Rajdhani';font-weight:700;flex-shrink:0;
+}
+.feed{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr2) transparent}
+.trow2{
+  display:grid;grid-template-columns:165px 80px 72px 78px 70px 68px;
+  padding:8px 12px;border-bottom:1px solid var(--bdr);cursor:pointer;transition:.08s;align-items:center;
+}
+.trow2:hover{background:rgba(0,255,136,.025)}
+.trow2.bfl{animation:bfa .5s} .trow2.rfl{animation:rfa .5s}
+@keyframes bfa{0%{background:rgba(0,255,136,.16)}100%{background:transparent}}
+@keyframes rfa{0%{background:rgba(255,34,68,.18)}100%{background:transparent}}
+.tnm{display:flex;align-items:center;gap:4px;font-weight:600}
+.ttk{background:rgba(0,255,136,.07);border:1px solid var(--bdr2);padding:1px 4px;font-size:9px;color:var(--g);max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp2{font-size:8px;padding:1px 4px;font-weight:700}
+.rp2.L{background:rgba(0,255,136,.1);color:var(--g)} .rp2.M{background:rgba(255,208,0,.1);color:var(--y)} .rp2.H{background:rgba(255,34,68,.1);color:var(--r)}
+.up{color:var(--g)} .dn{color:var(--r)} .dm{color:var(--dim)}
+.stg{font-size:9px;padding:2px 5px;border:1px solid currentColor;font-family:'Rajdhani';font-weight:700;letter-spacing:.5px}
+.stg.buy{color:var(--g)} .stg.rug{color:var(--r)} .stg.sl{color:var(--r)}
+.stg.skip{color:var(--dim)} .stg.sold{color:var(--c)} .stg.live{color:var(--y)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--dim);gap:8px}
+.empty .ico{font-size:34px;opacity:.35}
+
+/* RIGHT */
+.phdr{padding:7px 12px;font-size:9px;letter-spacing:2.5px;color:var(--dim);border-bottom:1px solid var(--bdr);background:var(--bg2);display:flex;justify-content:space-between;align-items:center;font-family:'Rajdhani';font-weight:700}
+.api-resp{background:var(--bg3);border:1px solid var(--bdr);margin:7px;padding:9px;max-height:160px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr2) transparent}
+.api-resp pre{font-size:9px;line-height:1.55;color:var(--dim);white-space:pre-wrap;word-break:break-all}
+.k{color:var(--c)} .s{color:var(--g)} .n{color:var(--y)}
+.bdr2{display:flex;justify-content:space-between;padding:5px 12px;font-size:10px;border-bottom:1px solid var(--bdr)}
+.bdr2 .lbl{color:var(--dim)}
+.rm{height:4px;background:linear-gradient(90deg,var(--g),var(--y),var(--r));border-radius:2px;position:relative;margin:5px 12px 0}
+.rn{position:absolute;top:-5px;width:2px;height:14px;background:#fff;box-shadow:0 0 4px #fff;transform:translateX(-50%);transition:left .5s;border-radius:1px}
+.loge{padding:7px 12px;border-bottom:1px solid var(--bdr);font-size:10px}
+.logt{color:var(--dim);font-size:9px} .logm{margin-top:2px}
+.logm.buy{color:var(--g)} .logm.rug{color:var(--r)} .logm.sell{color:var(--c)}
+.logm.skip{color:var(--dim)} .logm.warn{color:var(--y)} .logm.info{color:var(--p)}
+
+/* Toast */
+.toasts{position:fixed;bottom:14px;right:14px;z-index:10000;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.toast{padding:7px 13px;border:1px solid;font-size:11px;background:var(--bg);animation:ti .2s ease-out,to .2s 2.8s ease-in forwards}
+.toast.buy{border-color:var(--g);color:var(--g)} .toast.rug{border-color:var(--r);color:var(--r)} .toast.sell{border-color:var(--c);color:var(--c)} .toast.info{border-color:var(--p);color:var(--p)}
+@keyframes ti{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+@keyframes to{from{opacity:1}to{opacity:0}}
+
+/* Interval badge */
+.ibadge{
+  display:inline-block;padding:1px 6px;font-size:9px;border:1px solid var(--bdr2);
+  color:var(--dim);cursor:pointer;transition:.12s;margin:1px;
+}
+.ibadge.on{border-color:var(--g);color:var(--g);background:var(--g3)}
+</style>
+</head>
+<body>
+<div class="root">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">SOL<em>SNIPER</em> <sup>v2.1</sup></div>
+  <div class="top-pills">
+    <button class="pill sim on" id="pSim" onclick="setMode('sim')">⚡ SIMULAÇÃO</button>
+    <button class="pill live" id="pLive" onclick="setMode('live')">📡 LIVE API</button>
+  </div>
+  <div class="top-r">
+    <div class="conn"><div class="dot wait" id="dot"></div><span id="connTxt">AGUARDANDO</span></div>
+    <div class="ts"><span>API CALLS</span><b id="apiCnt">0</b></div>
+    <div class="ts"><span>SOLANA</span><b id="solP">$182.44</b></div>
+    <div class="ts"><span>FONTE</span><b id="src" style="color:var(--y)">SIM</b></div>
+  </div>
+</div>
+
+<div class="body">
+<!-- ============================================================ LEFT ============================================================ -->
+<div class="left">
+
+  <!-- Proxy Config -->
+  <div class="sec">
+    <div class="stit">// PROXY VERCEL — CONFIGURAÇÃO</div>
+    <div class="proxy-box">
+      <div class="proxy-row">
+        <span style="color:var(--dim);font-size:10px">URL do Proxy</span>
+        <span class="badge wait" id="proxyBadge">NÃO TESTADO</span>
+      </div>
+      <input class="proxy-inp" id="proxyUrl" type="text"
+        value="https://SEU-PROJETO.vercel.app"
+        placeholder="https://seu-projeto.vercel.app"
+        style="width:100%;margin:6px 0 4px 0">
+      <div style="font-size:9px;color:var(--dim)">→ endpoint: <span style="color:var(--g)">/api/dex?path=/latest/dex/search&q=...</span></div>
+      <button class="test-btn" onclick="testProxy()">🔌 TESTAR CONEXÃO</button>
+    </div>
+
+    <!-- Deploy guide -->
+    <div style="margin-top:10px">
+      <div class="stit" style="margin-bottom:8px">// COMO FAZER DEPLOY (15 min)</div>
+      <div class="step-list">
+        <div class="step">Instale o Vercel CLI: <code>npm i -g vercel</code></div>
+        <div class="step">Extraia o ZIP e entre na pasta: <code>cd solsniper-proxy</code></div>
+        <div class="step">Faça login: <code>vercel login</code></div>
+        <div class="step">Deploy: <code>vercel --prod</code></div>
+        <div class="step">Cole a URL gerada no campo acima e clique em Testar</div>
+      </div>
+    </div>
+
+    <!-- Test direto sem proxy -->
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">
+      <div style="font-size:9px;color:var(--dim);margin-bottom:6px">SEM PROXY — testa direto (pode bloquear por CORS):</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <span class="badge wait" id="d1" style="cursor:pointer" onclick="testDirect()">DIRECT API</span>
+        <span class="badge wait" id="d2" style="cursor:pointer" onclick="tryAllOrigins()">ALLORIGINS</span>
+        <span class="badge wait" id="d3">PROXY VERCEL</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Intervalo de atualização -->
+  <div class="sec">
+    <div class="stit">// INTERVALO DE FETCH (LIVE)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:2px">
+      <span class="ibadge" onclick="setInterval2(10000,this)">10s</span>
+      <span class="ibadge on" onclick="setInterval2(30000,this)">30s</span>
+      <span class="ibadge" onclick="setInterval2(60000,this)">1min</span>
+      <span class="ibadge" onclick="setInterval2(120000,this)">2min</span>
+      <span class="ibadge" onclick="setInterval2(300000,this)">5min</span>
+    </div>
+    <div style="font-size:9px;color:var(--dim);margin-top:6px">DexScreener: 300 req/min (pares) · 60 req/min (profiles)</div>
+  </div>
+
+  <!-- Strategy -->
+  <div class="sec">
+    <div class="stit">// ESTRATÉGIA</div>
+    <button class="sbtn on" onclick="selS(this,'sniper')">⚡ SNIPER — LAUNCH<span class="stag">FAST</span></button>
+    <button class="sbtn" onclick="selS(this,'copy')">🐋 COPY — WHALE<span class="stag">SAFE</span></button>
+    <button class="sbtn" onclick="selS(this,'dip')">📉 DIP BUY<span class="stag">MID</span></button>
+    <button class="sbtn" onclick="selS(this,'momentum')">🚀 MOMENTUM<span class="stag">HIGH</span></button>
+  </div>
+
+  <!-- Position -->
+  <div class="sec">
+    <div class="stit">// POSIÇÃO / TP / SL</div>
+    <div class="slr"><div class="sll">SOL por trade <b id="vP">0.5</b></div><input type=range min=.1 max=5 step=.1 value=.5 oninput="vP.textContent=parseFloat(this.value).toFixed(1)"></div>
+    <div class="slr"><div class="sll">Capital total <b id="vC">10</b> SOL</div><input type=range min=1 max=50 step=1 value=10 oninput="vC.textContent=this.value;IC=+this.value"></div>
+    <div class="slr"><div class="sll">TP1 — 50% em <b id="vT1">2</b>x</div><input type=range min=1.5 max=10 step=.5 value=2 oninput="vT1.textContent=parseFloat(this.value).toFixed(1)"></div>
+    <div class="slr"><div class="sll">TP2 — 30% em <b id="vT2">5</b>x</div><input type=range min=2 max=50 step=1 value=5 oninput="vT2.textContent=this.value"></div>
+    <div class="slr"><div class="sll">Stop Loss <b id="vSL">-50</b>%</div><input type=range min=-90 max=-10 step=5 value=-50 oninput="vSL.textContent=this.value"></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="sec">
+    <div class="stit">// FILTROS ANTI-RUG</div>
+    <div class="trow"><span>Liquidez mín. $50k</span><div class="tgl on" id="fL" onclick="this.classList.toggle('on')"></div></div>
+    <div class="trow"><span>Mint authority off</span><div class="tgl on" id="fM" onclick="this.classList.toggle('on')"></div></div>
+    <div class="trow"><span>Top 10 holders &lt;25%</span><div class="tgl on" id="fH" onclick="this.classList.toggle('on')"></div></div>
+    <div class="trow"><span>Liquidez bloqueada</span><div class="tgl on" id="fLk" onclick="this.classList.toggle('on')"></div></div>
+    <div class="trow"><span>Bundle detection</span><div class="tgl on" id="fB" onclick="this.classList.toggle('on')"></div></div>
+    <div class="trow"><span>Freeze authority off</span><div class="tgl on" id="fF" onclick="this.classList.toggle('on')"></div></div>
+  </div>
+
+  <div class="sec">
+    <button class="run" id="runBtn" onclick="toggleSim()">▶ INICIAR SIMULAÇÃO</button>
+    <div class="pgb"><div class="pgf" id="pgf" style="width:0%"></div></div>
+    <div class="pgs" id="pgs">AGUARDANDO</div>
+  </div>
+</div>
+
+<!-- ============================================================ CENTER ============================================================ -->
+<div class="center">
+  <div class="stats">
+    <div class="stat"><div class="slbl">P&L TOTAL</div><div class="sval g" id="stP">+0.000</div></div>
+    <div class="stat"><div class="slbl">WIN RATE</div><div class="sval y" id="stW">—</div></div>
+    <div class="stat"><div class="slbl">TRADES</div><div class="sval w" id="stT">0</div></div>
+    <div class="stat"><div class="slbl">RUGS BLOQ.</div><div class="sval c" id="stR">0</div></div>
+    <div class="stat"><div class="slbl">CAPITAL</div><div class="sval g" id="stK">10 SOL</div></div>
+  </div>
+
+  <div class="cw">
+    <canvas id="cv"></canvas>
+    <div class="ch">
+      <div style="font-size:9px;color:var(--dim);letter-spacing:2px">P&L ACUMULADO (SOL)</div>
+      <div class="chp" id="chpv">+0.000</div>
+      <div class="chc" id="chpc">+0.00%</div>
+    </div>
+    <div class="chr">
+      <div>TOKEN ATUAL</div>
+      <div style="color:var(--c);font-size:12px" id="curTk">—</div>
+      <div style="margin-top:2px" id="dataLbl">SIMULADO</div>
+    </div>
+  </div>
+
+  <!-- Search bar (live mode) -->
+  <div class="srch" id="srchWrap" style="display:none">
+    <input class="si" id="si" placeholder="Buscar par Solana: BONK, WIF, PEPE..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button class="sb" onclick="doSearch()">🔍 BUSCAR</button>
+    <button class="sb" onclick="fetchTrending()" style="border-color:rgba(255,208,0,.4);color:var(--y)">🔥 TRENDING</button>
+  </div>
+
+  <div class="fhdr"><span>TOKEN</span><span>MKT CAP</span><span>LIQ</span><span>5M CHG</span><span>RISCO</span><span>STATUS</span></div>
+  <div class="feed" id="feed"><div class="empty"><div class="ico">📡</div><span>Aguardando início...</span></div></div>
+</div>
+
+<!-- ============================================================ RIGHT ============================================================ -->
+<div class="right">
+  <div class="phdr">🔗 API STATUS<span id="apiSt" style="color:var(--dim)">—</span></div>
+
+  <!-- Risk -->
+  <div style="padding:8px 12px 6px">
+    <div style="font-size:9px;letter-spacing:2px;color:var(--dim);font-family:'Rajdhani';font-weight:700;margin-bottom:3px">RISK MÉDIO</div>
+    <div class="rm"><div class="rn" id="rn" style="left:15%"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dim);padding:2px 0 0">
+      <span>SAFE</span><span>MED</span><span>HIGH</span>
+    </div>
+  </div>
+
+  <!-- API Raw Response -->
+  <div class="phdr" style="position:static">📦 RAW RESPONSE<span id="respSrc" style="color:var(--dim)">—</span></div>
+  <div class="api-resp"><pre id="respPre">Aguardando chamada de API...</pre></div>
+
+  <!-- Live pairs info -->
+  <div class="phdr" style="position:static">📊 BREAKDOWN</div>
+  <div class="bdr2"><span class="lbl">Wins</span><span class="up" id="bW">0</span></div>
+  <div class="bdr2"><span class="lbl">Losses / SL</span><span class="dn" id="bL">0</span></div>
+  <div class="bdr2"><span class="lbl">Rugs tomados</span><span style="color:var(--r)" id="bR">0</span></div>
+  <div class="bdr2"><span class="lbl">Rugs evitados</span><span style="color:var(--c)" id="bRa">0</span></div>
+  <div class="bdr2"><span class="lbl">Skips</span><span class="dm" id="bSk">0</span></div>
+  <div class="bdr2"><span class="lbl">Melhor trade</span><span class="up" id="bBest">—</span></div>
+  <div class="bdr2"><span class="lbl">Pior trade</span><span class="dn" id="bWorst">—</span></div>
+  <div class="bdr2"><span class="lbl">Avg múltiplo</span><span style="color:var(--y)" id="bAvg">—</span></div>
+  <div class="bdr2"><span class="lbl">Pares ao vivo</span><span style="color:var(--c)" id="bPairs">0</span></div>
+
+  <div class="phdr" style="position:static">🖥 TRADE LOG<span id="logCnt" style="color:var(--dim)">0</span></div>
+  <div id="logEl"></div>
+</div>
+</div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+// ====================================================
+// CONFIG & STATE
+// ====================================================
+let mode = 'sim';
+let strat = 'sniper';
+let running = false;
+let simInt = null;
+let liveInt = null;
+let fetchInterval = 30000;
+let tick = 0;
+let IC = 10; // initial capital
+let pnlH = [0];
+let apiCount = 0;
+let logCount = 0;
+let proxyOk = false;
+let liveRealPairs = 0;
+
+const S = {pnl:0,wins:0,losses:0,rugs:0,rugAv:0,skips:0,trades:0,capital:10,best:null,worst:null,multiples:[]};
+const SP = {
+  sniper:  {wr:.38,rr:.26,avg:3.8,delay:380},
+  copy:    {wr:.52,rr:.08,avg:2.4,delay:800},
+  dip:     {wr:.48,rr:.10,avg:2.1,delay:1000},
+  momentum:{wr:.44,rr:.17,avg:4.6,delay:520}
+};
+const TOKS = ['BONK','WIF','POPCAT','MOODENG','PNUT','FWOG','GOAT','RETARDIO','BOME','SILLY','TREMP','BODEN','MYRO','PONKE','NOPE','SLERF','ANALOS','SPX6900','GECKO','SIGMA','GIGA','CHAD','COPE','JUICE','HARAMBE','PEPE2','DOGE2','SHIB2','MOON','WOJAK'];
+
+// ====================================================
+// MODE SWITCH
+// ====================================================
+function setMode(m) {
+  mode = m;
+  document.getElementById('pSim').classList.toggle('on', m==='sim');
+  document.getElementById('pLive').classList.toggle('on', m==='live');
+  document.getElementById('src').textContent = m==='live' ? 'LIVE' : 'SIM';
+  document.getElementById('src').style.color = m==='live' ? 'var(--g)' : 'var(--y)';
+  document.getElementById('srchWrap').style.display = m==='live' ? 'flex' : 'none';
+  if (m==='live') {
+    toast('📡 Modo LIVE ativado — configure o proxy Vercel', 'info');
+    addLog('📡 Modo LIVE ativado', 'info');
+  }
+}
+
+function selS(btn, s) {
+  document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  strat = s;
+}
+
+function setInterval2(ms, el) {
+  document.querySelectorAll('.ibadge').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+  fetchInterval = ms;
+  if (running && mode==='live') restartLive();
+}
+
+// ====================================================
+// PROXY TEST
+// ====================================================
+async function testProxy() {
+  const base = document.getElementById('proxyUrl').value.trim().replace(/\/+$/, '');
+  if (!base || base.includes('SEU-PROJETO')) {
+    toast('⚠ Configure a URL do proxy primeiro', 'rug');
+    return;
+  }
+  setB('proxyBadge','wait','TESTANDO...');
+  setB('d3','wait','...');
+  addLog(`🔌 Testando proxy: ${base}`, 'info');
+
+  try {
+    const url = `${base}/api/dex?path=/token-boosts/latest/v1`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (r.ok) {
+      const data = await r.json();
+      setB('proxyBadge','ok','✓ CONECTADO');
+      setB('d3','ok','✓ PROXY OK');
+      proxyOk = true;
+      setDot('ok','PROXY OK');
+      showRaw('proxy/token-boosts', data);
+      apiCount++; updApiCnt();
+      addLog('✅ Proxy Vercel conectado com sucesso!', 'buy');
+      toast('✅ Proxy Vercel online! Dados reais disponíveis.', 'buy');
+      document.getElementById('dataLbl').textContent = '🟢 DADOS REAIS';
+      if (running && mode==='live') fetchLivePairs();
+    } else {
+      setB('proxyBadge','err','✗ ERRO ' + r.status);
+      addLog(`❌ Proxy retornou ${r.status}`, 'warn');
+    }
+  } catch(e) {
+    setB('proxyBadge','err','✗ FALHOU');
+    setB('d3','err','✗ FALHOU');
+    addLog(`❌ Proxy falhou: ${e.message}`, 'warn');
+    toast('❌ Proxy não respondeu — verifique a URL', 'rug');
+  }
+}
+
+async function testDirect() {
+  setB('d1','wait','...');
+  try {
+    const r = await fetch('https://api.dexscreener.com/token-boosts/latest/v1', {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setB('d1','ok','✓ DIRETO OK');
+      setDot('ok','DIRETO');
+      showRaw('direct/token-boosts', d);
+      apiCount++; updApiCnt();
+      addLog('✅ API direta funcionou (sem CORS neste browser)', 'buy');
+      proxyOk = true;
+    } else { setB('d1','err','✗ ' + r.status); }
+  } catch(e) {
+    setB('d1','cors','CORS');
+    addLog(`⚠ Direct bloqueado por CORS: ${e.message}`, 'warn');
+    tryAllOrigins();
+  }
+}
+
+async function tryAllOrigins() {
+  setB('d2','wait','...');
+  try {
+    const target = encodeURIComponent('https://api.dexscreener.com/latest/dex/search?q=BONK');
+    const r = await fetch(`https://api.allorigins.win/get?url=${target}`, {signal: AbortSignal.timeout(9000)});
+    if (r.ok) {
+      const wrap = await r.json();
+      const data = JSON.parse(wrap.contents);
+      setB('d2','ok','✓ PROXY OK');
+      setDot('ok','ALLORIGINS');
+      showRaw('allorigins/search?q=BONK', data);
+      apiCount++; updApiCnt();
+      proxyOk = true;
+      addLog('✅ allorigins.win proxy funcionou — dados reais!', 'buy');
+      if (running && mode === 'live' && data.pairs) {
+        injectPairs(data.pairs.filter(p=>p.chainId==='solana').slice(0,10), 'allorigins');
+      }
+    } else { setB('d2','err','✗'); }
+  } catch(e) {
+    setB('d2','err','✗ FALHOU');
+    addLog(`❌ AllOrigins falhou: ${e.message}`, 'warn');
+  }
+}
+
+// ====================================================
+// LIVE FETCH
+// ====================================================
+async function fetchLivePairs(query = 'solana') {
+  const base = document.getElementById('proxyUrl').value.trim().replace(/\/+$/,'');
+  let data = null;
+
+  // Try Vercel proxy first
+  if (proxyOk && !base.includes('SEU-PROJETO')) {
+    try {
+      const url = `${base}/api/dex?path=/latest/dex/search&q=${encodeURIComponent(query)}`;
+      const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
+      if (r.ok) {
+        data = await r.json();
+        apiCount++; updApiCnt();
+        document.getElementById('dataLbl').textContent = '🟢 VERCEL PROXY';
+        showRaw(`proxy/search?q=${query}`, data);
+      }
+    } catch(_) {}
+  }
+
+  // Fallback: allorigins
+  if (!data) {
+    try {
+      const target = encodeURIComponent(`https://api.dexscreener.com/latest/dex/search?q=${query}`);
+      const r = await fetch(`https://api.allorigins.win/get?url=${target}`, {signal: AbortSignal.timeout(9000)});
+      if (r.ok) {
+        const wrap = await r.json();
+        data = JSON.parse(wrap.contents);
+        apiCount++; updApiCnt();
+        document.getElementById('dataLbl').textContent = '🟡 ALLORIGINS';
+        showRaw(`allorigins/search?q=${query}`, data);
+      }
+    } catch(_) {}
+  }
+
+  if (data?.pairs?.length) {
+    const sol = data.pairs.filter(p => p.chainId === 'solana');
+    injectPairs((sol.length ? sol : data.pairs).slice(0, 12), 'live');
+    liveRealPairs += (sol.length || data.pairs.length);
+    document.getElementById('bPairs').textContent = liveRealPairs;
+    addLog(`📡 ${sol.length || data.pairs.length} pares Solana recebidos para "${query}"`, 'sell');
+  } else {
+    addLog('⚠ Sem dados da API — usando simulação', 'warn');
+  }
+}
+
+async function fetchTrending() {
+  addLog('🔥 Buscando trending Solana...', 'info');
+  const base = document.getElementById('proxyUrl').value.trim().replace(/\/+$/,'');
+  let data = null;
+  try {
+    const url = proxyOk && !base.includes('SEU-PROJETO')
+      ? `${base}/api/dex?path=/token-boosts/latest/v1`
+      : `https://api.allorigins.win/get?url=${encodeURIComponent('https://api.dexscreener.com/token-boosts/latest/v1')}`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (r.ok) {
+      let d = await r.json();
+      if (d.contents) d = JSON.parse(d.contents);
+      showRaw('token-boosts/latest', d);
+      apiCount++; updApiCnt();
+      const tokens = Array.isArray(d) ? d : d.data || [];
+      addLog(`🔥 ${tokens.length} trending tokens recebidos`, 'buy');
+      toast(`🔥 ${tokens.length} trending tokens carregados`, 'sell');
+    }
+  } catch(e) {
+    addLog(`❌ Trending fetch falhou: ${e.message}`, 'warn');
+  }
+}
+
+async function doSearch() {
+  const q = document.getElementById('si').value.trim();
+  if (!q) return;
+  addLog(`🔍 Buscando: "${q}"`, 'info');
+  await fetchLivePairs(q);
+}
+
+function injectPairs(pairs, source) {
+  if (!pairs?.length) return;
+  const feed = document.getElementById('feed');
+  const nd = feed.querySelector('.empty');
+  if (nd) nd.remove();
+
+  for (const p of pairs) {
+    if (!p?.baseToken) continue;
+    const tok = {
+      ticker: (p.baseToken.symbol || 'UNK').toUpperCase().slice(0,10),
+      name: p.baseToken.name || '',
+      mcap: p.fdv || p.marketCap || 0,
+      liq: p.liquidity?.usd || 0,
+      change5m: +(p.priceChange?.m5 || 0),
+      vol24: p.volume?.h24 || 0,
+      isRug: false,
+      risk: (p.liquidity?.usd || 0) < 30000 ? 'M' : 'L',
+      real: true,
+      pair: p
+    };
+    // Aplicar filtros
+    const pass = applyFilters(tok);
+    addRow(tok, pass ? 'live' : 'skip', 0, source);
+    document.getElementById('curTk').textContent = tok.ticker;
+  }
+}
+
+function applyFilters(tok) {
+  const liq = on('fL') ? tok.liq >= 50000 : true;
+  return liq; // em modo live não temos on-chain data, só liquidez
+}
+
+// ====================================================
+// SIMULATION
+// ====================================================
+function toggleSim() {
+  if (running) { stopSim(); return; }
+  startSim();
+}
+
+function startSim() {
+  running = true; tick = 0; pnlH = [0];
+  Object.assign(S, {pnl:0,wins:0,losses:0,rugs:0,rugAv:0,skips:0,trades:0,capital:IC,best:null,worst:null,multiples:[]});
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('logEl').innerHTML = '';
+  logCount = 0;
+  document.getElementById('runBtn').textContent = '⏹ PARAR';
+  document.getElementById('runBtn').classList.add('go');
+  addLog('🚀 Iniciado — monitorando blockchain Solana', 'info');
+
+  if (mode === 'live') {
+    setDot('ok','LIVE');
+    fetchLivePairs('solana');
+    restartLive();
+  } else {
+    setDot('ok','SIMULANDO');
+    const sp = SP[strat];
+    simInt = setInterval(simTick, sp.delay);
+  }
+}
+
+function restartLive() {
+  clearInterval(liveInt);
+  liveInt = setInterval(() => fetchLivePairs('solana'), fetchInterval);
+}
+
+function stopSim() {
+  running = false;
+  clearInterval(simInt); clearInterval(liveInt);
+  document.getElementById('runBtn').textContent = '▶ INICIAR SIMULAÇÃO';
+  document.getElementById('runBtn').classList.remove('go');
+  document.getElementById('pgs').textContent = `FINALIZADO — ${S.trades} TRADES`;
+  document.getElementById('pgf').style.width = '100%';
+  setDot('wait','PARADO');
+  addLog(`🏁 Encerrado. P&L: ${S.pnl >= 0 ? '+' : ''}${S.pnl.toFixed(3)} SOL`, S.pnl >= 0 ? 'sell' : 'rug');
+}
+
+function simTick() {
+  tick++;
+  document.getElementById('pgf').style.width = Math.min(tick/200*100,100) + '%';
+  document.getElementById('pgs').textContent = `SCAN ${tick}/200 — ${S.trades} TRADES`;
+  if (tick >= 200) { stopSim(); return; }
+
+  const sp = SP[strat];
+  const tok = genTok();
+  const filters = ['fL','fM','fH','fLk','fB','fF'].filter(id => on(id)).length;
+  const filterStr = filters / 6;
+
+  if (tok.isRug && Math.random() < filterStr * 0.88) {
+    S.rugAv++;
+    addRow(tok,'skip',0,'sim');
+    addLog(`⛔ RUG BLOQUEADO: ${tok.ticker}`, 'skip');
+    updStats(); return;
+  }
+  if (!tok.isRug && Math.random() < 0.14) {
+    S.skips++;
+    addRow(tok,'skip',0,'sim');
+    updStats(); return;
+  }
+
+  const pos = parseFloat(document.getElementById('vP').value);
+  if (S.capital < pos) { stopSim(); return; }
+  const tp1 = parseFloat(document.getElementById('vT1').value);
+  const tp2 = parseFloat(document.getElementById('vT2').value);
+  const sl = parseFloat(document.getElementById('vSL').value) / 100;
+  let pnl = 0;
+
+  if (tok.isRug) {
+    pnl = -(pos * 0.93);
+    S.rugs++; S.losses++;
+    addRow(tok,'rug',pnl,'sim');
+    addLog(`💀 RUG: ${tok.ticker} — ${pnl.toFixed(3)} SOL`,'rug');
+    toast(`💀 RUG: ${tok.ticker}`,'rug');
+    if (S.worst===null||pnl<S.worst) S.worst=pnl;
+  } else if (Math.random() < sp.wr) {
+    const m = Math.max(1.1, 1 + (sp.avg-1)*(0.4+Math.random()*1.6));
+    pnl = (pos*.5*Math.min(m,tp1))+(pos*.3*Math.min(m,tp2))+(pos*.2*m)-pos;
+    S.wins++; S.multiples.push(m);
+    addRow(tok,'sold',pnl,'sim');
+    addLog(`✅ ${m.toFixed(1)}x — ${tok.ticker} +${pnl.toFixed(3)} SOL`,'sell');
+    toast(`✅ ${tok.ticker} ${m.toFixed(1)}x +${pnl.toFixed(2)} SOL`,'buy');
+    if (S.best===null||pnl>S.best) S.best=pnl;
+  } else {
+    pnl = pos * sl;
+    S.losses++;
+    addRow(tok,'sl',pnl,'sim');
+    addLog(`🔴 SL: ${tok.ticker} ${pnl.toFixed(3)} SOL`,'rug');
+    if (S.worst===null||pnl<S.worst) S.worst=pnl;
+  }
+  S.trades++; S.pnl+=pnl; S.capital+=pnl;
+  pnlH.push(S.pnl);
+  updStats(); drawChart();
+  document.getElementById('curTk').textContent = tok.ticker;
+  updRisk();
+}
+
+function genTok() {
+  const base = TOKS[Math.floor(Math.random()*TOKS.length)];
+  const sfx = Math.random()<.4?'':Math.floor(Math.random()*999);
+  const ticker = (base+sfx).toUpperCase();
+  const mcap = 5000 + Math.random()*3000000;
+  const liq = mcap*(0.04+Math.random()*.35);
+  const change5m = +((Math.random()-.38)*180).toFixed(1);
+  const rugRate = {sniper:.25,copy:.09,dip:.11,momentum:.18}[strat];
+  const isRug = Math.random() < rugRate;
+  return {ticker,mcap,liq,change5m,isRug,risk:isRug?'H':liq<30000?'M':'L',real:false};
+}
+
+// ====================================================
+// UI
+// ====================================================
+function addRow(tok, status, pnl, source) {
+  const feed = document.getElementById('feed');
+  const nd = feed.querySelector('.empty');
+  if (nd) nd.remove();
+  const row = document.createElement('div');
+  row.className = 'trow2';
+  const chgCls = tok.change5m >= 0 ? 'up' : 'dn';
+  let stHtml = '';
+  if (status==='skip') stHtml='<span class="stg skip">SKIP</span>';
+  else if (status==='rug') stHtml='<span class="stg rug">RUG</span>';
+  else if (status==='sl') stHtml=`<span class="stg sl">${pnl.toFixed(2)}</span>`;
+  else if (status==='sold') stHtml=`<span class="stg sold">${pnl>=0?'+':''}${pnl.toFixed(2)}</span>`;
+  else if (status==='live') stHtml='<span class="stg live">LIVE</span>';
+  const rw = tok.risk==='L'?25:tok.risk==='M'?60:92;
+  const rc = tok.risk==='L'?'var(--g)':tok.risk==='M'?'var(--y)':'var(--r)';
+  row.innerHTML = `
+    <div class="tnm">
+      <span class="ttk">${tok.ticker.slice(0,8)}</span>
+      <span class="rp2 ${tok.risk}">${tok.risk}</span>
+      ${tok.real?'<span style="font-size:9px;color:var(--p)">🔗</span>':''}
+    </div>
+    <div class="${tok.mcap>500000?'up':'dm'}">${fmt(tok.mcap)}</div>
+    <div class="${tok.liq<30000?'dn':'dm'}">${fmt(tok.liq)}</div>
+    <div class="${chgCls}">${tok.change5m>=0?'+':''}${tok.change5m}%</div>
+    <div><div style="width:48px;height:2px;background:var(--bdr);position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:${rw}%;background:${rc}"></div></div></div>
+    <div>${stHtml}</div>`;
+  if (status==='rug'||status==='sl') row.classList.add('rfl');
+  else if (status==='sold'&&pnl>0||status==='live') row.classList.add('bfl');
+  feed.insertBefore(row,feed.firstChild);
+  while(feed.children.length>60) feed.removeChild(feed.lastChild);
+}
+
+function addLog(msg, type) {
+  const t = new Date().toTimeString().slice(0,8);
+  const c = document.getElementById('logEl');
+  const e = document.createElement('div');
+  e.className='loge';
+  e.innerHTML=`<div class="logt">${t}</div><div class="logm ${type}">${msg}</div>`;
+  c.insertBefore(e,c.firstChild);
+  while(c.children.length>80) c.removeChild(c.lastChild);
+  document.getElementById('logCnt').textContent = ++logCount;
+}
+
+function updStats() {
+  const p = S.pnl;
+  se('stP', (p>=0?'+':'')+p.toFixed(3));
+  document.getElementById('stP').className='sval '+(p>=0?'g':'r');
+  se('chpv',(p>=0?'+':'')+p.toFixed(3));
+  document.getElementById('chpv').style.color=p>=0?'var(--g)':'var(--r)';
+  const pct=IC>0?(p/IC*100):0;
+  se('chpc',(pct>=0?'+':'')+pct.toFixed(2)+'%');
+  document.getElementById('chpc').className='chc'+(pct<0?' dn':'');
+  const tot=S.wins+S.losses+S.rugs;
+  const wr=tot>0?Math.round(S.wins/tot*100):0;
+  se('stW',wr?wr+'%':'—');
+  document.getElementById('stW').className='sval '+(wr>=50?'g':wr>=35?'y':'r');
+  se('stT',S.trades);
+  se('stR',S.rugAv);
+  const capEl=document.getElementById('stK');
+  capEl.textContent=S.capital.toFixed(2)+' SOL';
+  capEl.className='sval '+(S.capital>=IC?'g':'r');
+  se('bW',S.wins); se('bL',S.losses); se('bR',S.rugs); se('bRa',S.rugAv); se('bSk',S.skips);
+  se('bBest',S.best!==null?'+'+S.best.toFixed(3)+' SOL':'—');
+  se('bWorst',S.worst!==null?S.worst.toFixed(3)+' SOL':'—');
+  const avg=S.multiples.length?(S.multiples.reduce((a,b)=>a+b,0)/S.multiples.length).toFixed(2)+'x':'—';
+  se('bAvg',avg);
+}
+
+function updRisk() {
+  const tot=S.wins+S.losses+S.rugs;
+  const rr=tot>0?S.rugs/tot:0;
+  document.getElementById('rn').style.left=Math.max(5,Math.min(92,rr*200))+'%';
+}
+
+function showRaw(endpoint, data) {
+  document.getElementById('respSrc').textContent = endpoint.split('/').slice(-1)[0];
+  document.getElementById('apiSt').textContent = new Date().toTimeString().slice(0,5);
+  const str = JSON.stringify(data,null,2).slice(0,1400)+(JSON.stringify(data).length>1400?'\n...[truncado]':'');
+  document.getElementById('respPre').innerHTML = str
+    .replace(/("[\w\s$@.-]+")\s*:/g,'<span class="k">$1</span>:')
+    .replace(/:\s*(".*?")/g,': <span class="s">$1</span>')
+    .replace(/:\s*(-?\d+\.?\d*)/g,': <span class="n">$1</span>');
+}
+
+// ====================================================
+// CHART
+// ====================================================
+function drawChart() {
+  const cv=document.getElementById('cv');
+  cv.width=cv.parentElement.clientWidth;
+  cv.height=cv.parentElement.clientHeight;
+  const ctx=cv.getContext('2d');
+  const w=cv.width,h=cv.height;
+  const pad={t:28,b:22,l:6,r:6};
+  const cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+  ctx.clearRect(0,0,w,h);
+  if(pnlH.length<2) return;
+  const mx=Math.max(...pnlH,.05),mn=Math.min(...pnlH,-.05),rng=mx-mn||.1;
+  const tx=i=>pad.l+(i/(pnlH.length-1))*cw;
+  const ty=v=>pad.t+ch-((v-mn)/rng)*ch;
+  ctx.strokeStyle='rgba(0,255,136,0.05)';ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){const y=pad.t+(i/3)*ch;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();}
+  const zy=ty(0);
+  if(zy>pad.t&&zy<h-pad.b){ctx.setLineDash([3,5]);ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.beginPath();ctx.moveTo(pad.l,zy);ctx.lineTo(w-pad.r,zy);ctx.stroke();ctx.setLineDash([]);}
+  const last=pnlH[pnlH.length-1],col=last>=0?'#00ff88':'#ff2244';
+  const gr=ctx.createLinearGradient(0,pad.t,0,h);
+  gr.addColorStop(0,last>=0?'rgba(0,255,136,0.26)':'rgba(255,34,68,0.04)');
+  gr.addColorStop(1,last>=0?'rgba(0,255,136,0.02)':'rgba(255,34,68,0.26)');
+  ctx.beginPath();ctx.moveTo(tx(0),ty(pnlH[0]));
+  for(let i=1;i<pnlH.length;i++) ctx.lineTo(tx(i),ty(pnlH[i]));
+  ctx.lineTo(tx(pnlH.length-1),h-pad.b);ctx.lineTo(tx(0),h-pad.b);ctx.closePath();
+  ctx.fillStyle=gr;ctx.fill();
+  ctx.beginPath();ctx.moveTo(tx(0),ty(pnlH[0]));
+  for(let i=1;i<pnlH.length;i++) ctx.lineTo(tx(i),ty(pnlH[i]));
+  ctx.strokeStyle=col;ctx.lineWidth=2;ctx.shadowColor=col;ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0;
+  const ex=tx(pnlH.length-1),ey=ty(last);
+  ctx.beginPath();ctx.arc(ex,ey,4,0,Math.PI*2);ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=12;ctx.fill();ctx.shadowBlur=0;
+}
+
+// ====================================================
+// HELPERS
+// ====================================================
+function fmt(n){if(!n)return'$0';if(n>=1e9)return'$'+(n/1e9).toFixed(2)+'B';if(n>=1e6)return'$'+(n/1e6).toFixed(2)+'M';if(n>=1e3)return'$'+(n/1e3).toFixed(0)+'K';return'$'+n.toFixed(0)}
+function se(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
+function on(id){return document.getElementById(id).classList.contains('on')}
+function setB(id,cls,txt){const e=document.getElementById(id);e.className='badge '+cls;e.textContent=txt}
+function setDot(st,txt){const d=document.getElementById('dot');const c=st==='ok'?'var(--g)':st==='err'?'var(--r)':'var(--y)';d.style.background=c;d.style.boxShadow=`0 0 8px ${c}`;d.className='dot '+st;document.getElementById('connTxt').textContent=txt.toUpperCase()}
+function updApiCnt(){document.getElementById('apiCnt').textContent=apiCount}
+function toast(msg,type){const a=document.getElementById('toasts');const t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;a.appendChild(t);setTimeout(()=>t.remove(),3200)}
+
+window.addEventListener('resize',drawChart);
+drawChart();
+
+// SOL price simulation
+let sp2=182.44;
+setInterval(()=>{sp2+=(Math.random()-.5)*.5;document.getElementById('solP').textContent='$'+sp2.toFixed(2)},2800);
+</script>
+</body>
+</html>
